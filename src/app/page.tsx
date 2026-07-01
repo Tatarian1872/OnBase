@@ -83,7 +83,7 @@ export default function Home() {
   const [newMessageText, setNewMessageText] = useState('');
   const [paidUsers, setPaidUsers] = useState<Record<string, boolean>>({});
   const [reportedUsers, setReportedUsers] = useState<Record<string, boolean>>({});
-  const [demoMode, setDemoMode] = useState<boolean>(true); // Varsayılan olarak demo modunda çalıştır, işlem kolaylığı için
+  const demoMode = false;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // NFT Durumları
@@ -139,24 +139,43 @@ export default function Home() {
     let latitude = 40.9882; // Default Kadikoy
     let longitude = 29.0254;
 
+    if (!navigator.geolocation) {
+      throw new Error("Geolocation is not supported by your browser/device.");
+    }
+
     try {
-      // Read actual location using browser GPS API
+      // Phase 1: Try high accuracy (satellite GPS)
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 6000,
+          timeout: 7000,
           maximumAge: 0
         });
       });
       latitude = position.coords.latitude;
       longitude = position.coords.longitude;
-      setGpsLoadingText(`GPS Location Acquired: (${latitude.toFixed(4)}° N, ${longitude.toFixed(4)}° E)`);
-      await new Promise((resolve) => setTimeout(resolve, 800));
-    } catch (err) {
-      console.warn("GPS permission denied, using simulated location.", err);
-      setGpsLoadingText('GPS permission not granted. Using simulated location (40.9882° N, 29.0254° E)...');
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+    } catch (highAccuracyErr) {
+      console.warn("High accuracy GPS failed or timed out, trying network location...", highAccuracyErr);
+      
+      // Phase 2: Try low accuracy (cellular/Wi-Fi positioning, which works instantly indoors)
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: false,
+            timeout: 7000,
+            maximumAge: 10000
+          });
+        });
+        latitude = position.coords.latitude;
+        longitude = position.coords.longitude;
+      } catch (lowAccuracyErr: any) {
+        console.error("All Geolocation attempts failed:", lowAccuracyErr);
+        throw new Error("GPS access failed. Please enable location services and grant browser location permissions.");
+      }
     }
+
+    setGpsLoadingText(`GPS Location Acquired: (${latitude.toFixed(4)}° N, ${longitude.toFixed(4)}° E)`);
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
     try {
       setGpsLoadingText('Verifying regional location area...');
@@ -470,21 +489,6 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Demo Mod Toggle Butonu */}
-          <button 
-            onClick={() => {
-              setDemoMode(!demoMode);
-              showToast(demoMode ? "Gerçek Web3 moduna geçildi (Cüzdan onayı istenir)" : "Demo/Simüle moduna geçildi (Testnet bakiyesi gerektirmez)");
-            }}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
-              demoMode 
-                ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' 
-                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-            }`}
-          >
-            {demoMode ? '✨ Demo Mode (Active)' : '🔗 Web3 Mode'}
-          </button>
-
           {isConnected ? (
             <div className="flex items-center gap-3">
               <div className="hidden md:flex flex-col text-right">
